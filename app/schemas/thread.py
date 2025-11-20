@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 # ThreadBase：共通部分（title）
 class ThreadBase(BaseModel):
@@ -11,3 +12,4 @@ class ThreadCreate(ThreadBase):
 # ThreadResponse(ThreadBaseを継承)：一覧や詳細で返すデータ（id がある）
 class ThreadResponse(ThreadBase):
     id: int
+    created_at:datetime
