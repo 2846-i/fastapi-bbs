@@ -1,41 +1,31 @@
-
 from fastapi import APIRouter
+from app.schemas.thread import ThreadResponse, ThreadCreate
+from datetime import datetime
 
 router = APIRouter(
     prefix="/threads",
     tags=["Threads"]
 )
 
-
-@router.get("/")
+@router.get("/", response_model=list[ThreadResponse])
 async def list_threads():
-    """
-    スレッド一覧（ダミー）
-    将来はDBから取得するが、今は固定のJSONを返す。
-    """
     return [
-        {"id": 1, "title": "ダミースレッド1"},
-        {"id": 2, "title": "ダミースレッド2"},
+        {"id": 1, "title": "ダミースレッド1", "created_at": "2025-11-20T00:00:00"},
+        {"id": 2, "title": "ダミースレッド2", "created_at": "2025-11-21T00:00:00"},
     ]
 
-
-@router.get("/{thread_id}")
+@router.get("/{thread_id}", response_model=ThreadResponse)
 async def get_thread(thread_id: int):
-    """
-    スレッド詳細（ダミー）
-    """
     return {
         "id": thread_id,
         "title": f"ダミースレッド{thread_id}",
-        "message": "ここに将来、投稿一覧などが入る予定です。",
+        "created_at": "2025-11-21T00:00:00"
     }
 
-
-@router.post("/")
-async def create_thread():
-    """
-    スレッド作成（ダミー）
-    本当はタイトルや本文を受け取ってDBに保存する。
-    今は '作成されたことにする' だけ。
-    """
-    return {"status": "ok", "message": "仮のスレッド作成APIです。"}
+@router.post("/", response_model=ThreadResponse)
+async def create_thread(thread: ThreadCreate):
+    return {
+        "id": 999,
+        "title": thread.title,
+        "created_at": "2025-11-21T00:00:00",
+    }
