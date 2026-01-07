@@ -1,84 +1,77 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import select, insert
 
 from app.schemas.post import PostCreate, PostResponse
+from app.database import get_db
+from app.models.post import Post
+from app.models.thread import Thread
+
 
 router = APIRouter(
     prefix="/posts",
     tags=["Posts"]
 )
 
-
-# -----------------------
-# 投稿詳細（ダミー）
-# -----------------------
 @router.get("/{post_id}", response_model=PostResponse)
-async def get_post(post_id: int):
-    """
-    投稿詳細（ダミー）
-    """
-    return {
-        "id": post_id,
-        "thread_id": 1,
-        "post_number": 1,
-        "content": f"ダミー投稿 {post_id} の内容です。",
-        "parent_post_id": None,
-        "created_at": "2025-11-21T00:00:00"
-    }
+async def get_post(post_id: int, db: Session = Depends(get_db)):
+    stmt = select(Post).where(Post.id == post_id)
+    post = db.execute(stmt).scalar_one_or_none()
 
+    if post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
 
-# =======================
-# Threads に紐づくルート
-# =======================
+    return post
 
 threads_router = APIRouter(
     prefix="/threads",
     tags=["Posts"]
 )
 
-
-# -----------------------
-# スレッドの投稿一覧
-# -----------------------
 @threads_router.get("/{thread_id}/posts", response_model=list[PostResponse])
-async def list_posts(thread_id: int):
-    """
-    指定スレッドの投稿一覧（ダミー）
-    """
-    return [
-        {
-            "id": 1,
-            "thread_id": thread_id,
-            "post_number": 1,
-            "content": "ダミー投稿1",
-            "parent_post_id": None,
-            "created_at": "2025-11-21T00:00:00",
-        },
-        {
-            "id": 2,
-            "thread_id": thread_id,
-            "post_number": 2,
-            "content": "ダミー投稿2（返信）",
-            "parent_post_id": 1,
-            "created_at": "2025-11-21T00:00:00",
-        },
-    ]
+async def list_posts(thread_id: int, db: Session = Depends(get_db)):
+    stmt_thread = select(Thread).where(Thread.id == thread_id)
+    exists = db.execute(stmt_thread).scalar_one_or_none()
 
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
 
-# -----------------------
-# 投稿作成（通常 or 返信）
-# -----------------------
+    stmt = select(Post).where(Post.thread_id == thread_id).order_by(Post.post_number)
+    posts = db.execute(stmt).scalars().all()
+
+    return posts
+
 @threads_router.post("/{thread_id}/posts", response_model=PostResponse)
-async def create_post(thread_id: int, post: PostCreate):
-    """
-    投稿作成（ダミー）
-    parent_post_id が None → 通常投稿
-    parent_post_id が番号 → 返信
-    """
-    return {
-        "id": 999,
-        "thread_id": thread_id,
-        "post_number": 999,  # 本当はDBで決まる
-        "content": post.content,
-        "parent_post_id": post.parent_post_id,
-        "created_at": "2025-11-21T00:00:00",
-    }
+async def create_post(thread_id: int, post: PostCreate, db: Session = Depends(get_db)):
+    stmt_thread = select(Thread).where(Thread.id == thread_id)
+    exists = db.execute(stmt_thread).scalar_one_or_none()
+
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    
+    stmt_last = (select(Post.post_number)
+                .where(Post.thread_id == thread_id)
+                .order_by(Post.post_number.desc())
+                .limit(1)
+    )
+
+    last_number = db.execute(stmt_last).scalar_one_or_none()
+    next_number = 1 if last_number is None else last_number + 1
+
+    stmt_insert = insert(Post).values(
+        thread_id = thread_id,
+        post_number = next_number,
+        content = post.content,
+        parent_post_id = post.parent_post_id
+    )
+
+    result = db.execute(stmt_insert)
+
+    db.commit()
+
+    new_id = result.lastrowid
+
+    stmt_new = select(Post).where(Post.id == new_id)
+    new_post = db.execute(stmt_new).scalar_one()
+
+    return new_post

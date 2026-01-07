@@ -1,6 +1,10 @@
-from fastapi import APIRouter
+
+from fastapi import APIRouter,Depends
+from app.models.thread import Thread
 from app.schemas.thread import ThreadResponse, ThreadCreate
-from datetime import datetime
+from app.database import get_db
+from sqlalchemy.orm import Session
+from sqlalchemy import select, insert
 
 router = APIRouter(
     prefix="/threads",
@@ -8,33 +12,25 @@ router = APIRouter(
 )
 
 @router.get("/", response_model=list[ThreadResponse])
-async def list_threads():
-    return [
-    {
-        "id": 1,
-        "title": "ダミースレッド1",
-        "created_at": datetime(2025, 11, 20, 0, 0, 0)
-    },
-    {
-        "id": 2,
-        "title": "ダミースレッド2",
-        "created_at": datetime(2025, 11, 21, 0, 0, 0)
-    },
-]
+async def list_threads(db: Session = Depends(get_db)):
+    stmt = select(Thread)
+    result = db.execute(stmt).scalars().all()
+    return result
 
 @router.get("/{thread_id}", response_model=ThreadResponse)
-async def get_thread(thread_id: int):
-    return {
-    "id": thread_id,
-    "title": f"ダミースレッド{thread_id}",
-    "created_at": datetime(2025, 11, 21, 0, 0, 0)
-}
+async def get_thread(thread_id: int, db: Session = Depends(get_db)):
+    stmt = select(Thread).where(Thread.id == thread_id)
+    result = db.execute(stmt).scalar_one()
+    return result
 
 @router.post("/", response_model=ThreadResponse)
-async def create_thread(thread: ThreadCreate):
-    return {
-    "id": 999,
-    "title": thread.title,
-    "created_at": datetime(2025, 11, 21, 0, 0, 0)
-}
+async def create_thread(thread: ThreadCreate,db: Session = Depends(get_db)):
+    stmt = insert(Thread).values(title=thread.title)
+    result = db.execute(stmt)
+    db.commit()
 
+    new_id = result.lastrowid
+
+    stmt2 = select(Thread).where(Thread.id == new_id)
+    new_thread = db.execute(stmt2).scalar_one()
+    return new_thread
